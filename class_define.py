@@ -9,6 +9,11 @@ class Signal:
         self.tx_symbols = tx_symbols
         self.fs = fs
         self.wavelength = wavelength
+        self.__samples_out_fiber = self.samples.copy()
+
+    @property
+    def original_samples(self):
+        return self.__samples_out_fiber
 
     def __getitem__(self, item):
         return self.samples[item]

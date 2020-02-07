@@ -60,7 +60,7 @@ def lms_equalize_core(ex, ey, train_symbol,wxx, wyy, wxy, wyx, mu_train,mu_dd,is
             error_xpol = train_symbol_xpol[idx] - xout
             error_ypol = train_symbol_ypol[idx] - yout
         else:
-            raise NotImplementedError
+            pass
             # xpol_symbol = decision(xout, constl)
             # ypol_symbol = decision(yout, constl)
             # error_xpol = xout - xpol_symbol

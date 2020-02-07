@@ -24,18 +24,22 @@ def find_each_section(signal, total_length, symbol_length):
 
         try:
             out = out[:, symbol_length * signal.sps:]
-            out, _ = syncsignal(signal.symbol, out, 2, 1)
+            out, _ = syncsignal(signal.symbol, out, 2, 0)
         except Exception as e:
             return signals
+
+    return signals
 
 
 def batch_equlization(signal):
     from dsp.dsp import CMA, LMS, Superscalar
     from dsp.dsp import syncsignal_tx2rx as syncsignal
 
-    cma = CMA(ntaps=321, lr=0.0001, loops=3)
+   # cma = CMA(ntaps=321, lr=0.0001, loops=3)
+    lms = LMS(ntaps=109,lr=[0.01/5],train_time=3,train_symbols=signal.tx_symbols,loops=3)
     signal[:] = signal[:] / np.sqrt(np.mean(np.abs(signal[:]) ** 2, axis=-1, keepdims=True))
-    signal = cma.equalize(signal)
+    # signal = cma.equalize(signal)
+    signal = lms.equalize(signal)
     # cma.plot_error()
 
     out = syncsignal(signal.samples, signal.tx_symbols)
@@ -44,7 +48,7 @@ def batch_equlization(signal):
     cpe = Superscalar(256, 0.02, 20, 0, 4)
     signal = cpe.prop(signal)
     signal[:] = signal[:] / np.sqrt(np.mean(np.abs(signal[:]) ** 2, axis=-1, keepdims=True))
-    noise = signal[:] - signal.tx_symbols
+    noise = signal[:,1024:-1024] - signal.tx_symbols[:,1024:-1024]
     power = np.mean(np.abs(noise) ** 2, axis=-1).sum()
     print(10 * np.log10((2 - power) / power))
 
@@ -69,7 +73,7 @@ def main(samples, symbols, adc_rate, dac_rate, baudrate, tx_symbol_length, span_
     freq_comp = FrequencyOffsetComp(8, True)
     signal = freq_comp.prop(signal)
     print(freq_comp.freq_offset)
-    signals = find_each_section(signal, total_length=int(np.floor(len(signal) / sylen / 2)), symbol_length=sylen)
+    signals = find_each_section(signal, total_length=int(np.floor(len(signal) / sylen / 2))-1, symbol_length=sylen)
     for signal in signals:
         batch_equlization(signal)
 

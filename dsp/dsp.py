@@ -142,7 +142,7 @@ class LMS(Equalizer):
 
     def equalize(self, signal):
         import numpy as np
-
+        self.train_symbols = self.train_symbols[:, self.ntaps // 2 //signal.sps:]
         samples_xpol = _segment_axis(signal[0], self.ntaps, self.ntaps - signal.sps)
         samples_ypol = _segment_axis(signal[1], self.ntaps, self.ntaps - signal.sps)
 
@@ -435,7 +435,6 @@ def syncsignal(symbol_tx, rx_signal, sps, visable=False):
 
         corr_res.append(res)
         out[i] = np.roll(sample_rx_temp, sps * (-index - 1 + symbol_tx_temp.shape[0]))
-        print(sps * (-index - 1 + symbol_tx_temp.shape[0]))
     if isinstance(rx_signal,Signal):
         rx_signal.samples = out
         return rx_signal
