@@ -3,7 +3,7 @@ from class_define import Signal
 from dsp.dsp_tools import _segment_axis
 from dsp.numba_core import cma_equalize_core, lms_equalize_core
 from filter_design import rrcos_pulseshaping_freq
-
+import matplotlib.pyplot as plt
 
 def cd_compensation(span, signal: Signal, fs):
     '''
@@ -12,10 +12,6 @@ def cd_compensation(span, signal: Signal, fs):
         signal:
             in place modify the signal
     '''
-    if signal.is_on_cuda:
-        import cupy as np
-    else:
-        import numpy as np
 
     center_wavelength = signal.wavelength
     freq_vector = np.fft.fftfreq(len(signal[0]), 1 / fs)
@@ -132,6 +128,8 @@ class CMA(Equalizer):
             self.error_ypol_array[idx] = np.abs(error_ypol_array[0]) ** 2
 
         self.equalized_symbols = symbols
+        signal.samples = symbols
+        return signal
 
 
 class LMS(Equalizer):
@@ -172,6 +170,8 @@ class LMS(Equalizer):
 
 
         self.equalized_symbols = symbols
+        signal.samples = symbols
+        return signal
 
 
 class FrequencyOffsetComp(object):
@@ -215,7 +215,7 @@ class FrequencyOffsetComp(object):
 
         signal.samples = np.array([xpol,ypol])
         self.freq_offset = freq_offset
-
+        return signal
 
 def find_freq_offset(sig, fs,average_over_modes = True, fft_size = 2**18):
     """
@@ -294,7 +294,7 @@ class Superscalar:
             self.symbol_for_snr.append(symbol_for_snr)
             self.phase_noise.append(phase_noise)
         signal.samples = np.array(self.cpr)
-        signal.symbol = np.array(self.symbol_for_snr)
+        signal.tx_symbols = np.array(self.symbol_for_snr)
 
         self.cpr = np.array(self.cpr)
         self.symbol_for_snr = np.array(self.symbol_for_snr)
@@ -418,6 +418,7 @@ def syncsignal(symbol_tx, rx_signal, sps, visable=False):
     symbol_tx = np.atleast_2d(symbol_tx)
     sample_rx = np.atleast_2d(rx_signal[:])
     out = np.zeros_like(sample_rx)
+    corr_res = []
     # assert sample_rx.ndim == 1
     # assert symbol_tx.ndim == 1
     assert sample_rx.shape[1] >= symbol_tx.shape[1]
@@ -431,13 +432,13 @@ def syncsignal(symbol_tx, rx_signal, sps, visable=False):
             plt.plot(np.abs(np.atleast_2d(res)[0]))
             plt.show()
         index = np.argmax(np.abs(res))
-
+        corr_res.append(res)
         out[i] = np.roll(sample_rx_temp, sps * (-index - 1 + symbol_tx_temp.shape[0]))
     if isinstance(rx_signal,Signal):
         rx_signal.samples = out
         return rx_signal
     else:
-        return out
+        return out,corr_res
 
 
 def syncsignal_tx2rx(symbol_rx, symbol_tx):
@@ -459,3 +460,50 @@ def syncsignal_tx2rx(symbol_rx, symbol_tx):
 
         out[i] = np.roll(symbol_tx_temp, -index - 1 + sample_rx_temp.shape[0])
     return out
+
+
+def remove_dc(samples):
+    samples = np.atleast_2d(samples)
+    samples = samples - np.mean(samples,axis=1,keepdims=True)
+    return samples
+
+def orthonormalize_signal(E, os=1):
+    """
+    Orthogonalizing signal using the Gram-Schmidt process _[1].
+    Parameters
+    ----------
+    E : array_like
+       input signal
+    os : int, optional
+        oversampling ratio of the signal
+    Returns
+    -------
+    E_out : array_like
+        orthonormalized signal
+    References
+    ----------
+    .. [1] https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process for more
+       detailed description.
+    """
+
+    E = np.atleast_2d(E)
+    E_out = np.empty_like(E)
+    for l in range(E.shape[0]):
+        # Center
+        real_out = E[l,:].real - E[l,:].real.mean()
+        tmp_imag = E[l,:].imag - E[l,:].imag.mean()
+
+        # Calculate scalar products
+        mean_pow_inphase = np.mean(real_out**2)
+        mean_pow_quadphase = np.mean(tmp_imag**2)
+        mean_pow_imb = np.mean(real_out*tmp_imag)
+
+        # Output, Imag orthogonal to Real part of signal
+        sig_out = real_out / np.sqrt(mean_pow_inphase) +\
+                                    1j*(tmp_imag - mean_pow_imb * real_out / mean_pow_inphase) / np.sqrt(mean_pow_quadphase)
+        # Final total normalization to ensure IQ-power equals 1
+        E_out[l,:] = sig_out - np.mean(sig_out[::os])
+        E_out[l,:] = E_out[l,:] / np.sqrt(np.mean(np.abs(E_out[l,::os])**2))
+
+    return E_out
+

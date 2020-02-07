@@ -1,4 +1,6 @@
 import numpy as np
+from scipy.constants import c
+import matplotlib.pyplot as plt
 class Signal:
 
     def __init__(self,baudrate,samples,tx_symbols,fs,wavelength):
@@ -17,12 +19,41 @@ class Signal:
     @property
     def shape(self):
         return self.samples.shape
-
+    @property
+    def constl(self):
+        return np.unique(self.tx_symbols[0])
+    @property
+    def symbol(self):
+        return self.tx_symbols
+    @property
+    def sps(self):
+        return int(self.fs /self.baudrate)
 
     def __len__(self):
 
         samples = np.atleast_2d(self.samples)
         return len(samples[0])
+
+    def scatterplot(self, sps):
+
+
+        fignumber = self.shape[0]
+        fig, axes = plt.subplots(nrows=1, ncols=fignumber)
+        for ith, ax in enumerate(axes):
+            ax.scatter(self[ith, ::sps].real, self[ith, ::sps].imag, s=1, c='b')
+            ax.set_aspect('equal', 'box')
+
+            # ax.set_xlim(
+            #     [self[ith, ::sps].real.min() - self[ith, ::sps].real.min() / 3,
+            #      self[ith, ::sps].real.max() + self[ith, ::sps].real.max() / 3])
+            # ax.set_ylim(
+            #     [self[ith, ::sps].imag.min() - self[ith, ::sps].imag.min() / 3,
+            #      self[ith, ::sps].imag.max() + self[ith, ::sps].imag.max() / 3])
+
+        plt.tight_layout()
+        plt.show()
+
+
 
 class Fiber(object):
 
