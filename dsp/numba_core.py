@@ -29,7 +29,7 @@ def cma_equalize_core(ex, ey, wxx, wyy, wxy, wyx, mu):
         error_xpol = 1 - np.abs(xout) ** 2
         error_ypol = 1 - np.abs(yout) ** 2
         error_xpol_array[0, idx] = error_xpol
-        error_xpol_array[0, idx] = error_ypol
+        error_ypol_array[0, idx] = error_ypol
         wxx = wxx + mu * error_xpol * xout * np.conj(xx)
         wxy = wxy + mu * error_xpol * xout * np.conj(yy)
         wyx = wyx + mu * error_ypol * yout * np.conj(xx)

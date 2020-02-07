@@ -13,7 +13,7 @@ def find_each_section(signal,total_length,symbol_length):
     #2e6 ----5 被采样，降到2倍采样
     import matplotlib.pyplot as plt
     from scipy.signal import correlate
-    out,corr_res = syncsignal(signal.tx_symbols,signal.samples,2,False)
+    out,corr_res = syncsignal(signal.tx_symbols,signal.samples,2,1)
     signals = []
     for i in range(total_length):
         signals.append(Signal(signal.baudrate,out[:,i*symbol_length*signal.sps:(i+1)*symbol_length*signal.sps],
@@ -25,19 +25,22 @@ def find_each_section(signal,total_length,symbol_length):
 def batch_equlization(signals):
     from dsp.dsp import CMA,LMS,Superscalar
     from dsp.dsp import syncsignal_tx2rx as syncsignal
-    cma = CMA(ntaps=177,lr=0.0004,loops=13)
     for signal in signals:
-        signal[:] = signal[:] - np.mean(signal[:],axis=-1,keepdims=True)
+        cma = CMA(ntaps=321, lr=0.00001, loops=3)
         signal[:] = signal[:]/np.sqrt(np.mean(np.abs(signal[:])**2,axis=-1,keepdims=True))
         signal = cma.equalize(signal)
+        # cma.plot_error()
+
         out = syncsignal(signal.samples,signal.tx_symbols)
         signal.tx_symbols = out
-        cpe = Superscalar(200,0.02,20,0,4)
+        signal.tx_symbols = signal.tx_symbols[:,:signal.shape[1]]
+        cpe = Superscalar(256,0.02,20,0,4)
         signal = cpe.prop(signal)
         signal[:] = signal[:]/np.sqrt(np.mean(np.abs(signal[:])**2,axis=-1,keepdims=True))
         noise = signal[:] - signal.tx_symbols
         power = np.mean(np.abs(noise)**2,axis=-1).sum()
-        print(10*np.log10((1-power)/power))
+        print(10*np.log10((2-power)/power))
+
 
     return signals
 
@@ -69,16 +72,18 @@ def main(samples,symbols,adc_rate,dac_rate,baudrate,tx_symbol_length,span_length
     signals = batch_equlization(signals)
 if __name__ == '__main__':
     import numpy as np
+    import joblib
     from preprocessing import readdata
     from scipy.io import loadmat
-    samples = readdata('/Volumes/D/0dbm/40')
+    samples = readdata('0')
+    #samples = np.load('6.npz')['arr_0']
     samples[0],samples[1] = samples[1],samples[0]
-    #samples[0] = np.conj(samples[0])
-
     symbols = loadmat('txqpsk.mat')['tx_symbols']
-    #symbols[0] = np.conj(symbols[0])
+    symbols[0] = np.conj(symbols[0])
     symbols[1] = np.conj(symbols[1])
 
+
+    #symbols[0],symbols[1] = symbols[1],symbols[0]
     main(samples,symbols,100e9,80e9,20e9,span_length=320,tx_symbol_length=2**18,span_param=dict(alpha=0.2,D=16.7))
 
 
