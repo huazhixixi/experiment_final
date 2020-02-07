@@ -25,4 +25,3 @@ def readdata(file_name):
 def main():
     readdata('/Volumes/D/0dbm/0')
 
-main()

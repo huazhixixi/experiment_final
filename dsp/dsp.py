@@ -455,7 +455,7 @@ def syncsignal_tx2rx(symbol_rx, symbol_tx):
         sample_rx_temp = symbol_rx[i, :]
 
         res = correlate(symbol_tx_temp, sample_rx_temp)
-
+        plt.plot(np.abs(res))
         index = np.argmax(np.abs(res))
 
         out[i] = np.roll(symbol_tx_temp, -index - 1 + sample_rx_temp.shape[0])
