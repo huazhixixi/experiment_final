@@ -432,8 +432,10 @@ def syncsignal(symbol_tx, rx_signal, sps, visable=False):
             plt.plot(np.abs(np.atleast_2d(res)[0]))
             plt.show()
         index = np.argmax(np.abs(res))
+
         corr_res.append(res)
         out[i] = np.roll(sample_rx_temp, sps * (-index - 1 + symbol_tx_temp.shape[0]))
+        print(sps * (-index - 1 + symbol_tx_temp.shape[0]))
     if isinstance(rx_signal,Signal):
         rx_signal.samples = out
         return rx_signal
