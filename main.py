@@ -19,31 +19,31 @@ def find_each_section(signal,total_length,symbol_length):
         signals.append(Signal(signal.baudrate,out[:,i*symbol_length*signal.sps:(i+1)*symbol_length*signal.sps],
 
                               signal.tx_symbols,signal.fs,signal.wavelength))
+
+        out = out[:,(i + 1) * symbol_length * signal.sps:]
+        out ,_=  syncsignal(out,signal.samples,2,1)
+
     return signals
 
 
-def batch_equlization(signals):
+def batch_equlization(signal):
     from dsp.dsp import CMA,LMS,Superscalar
     from dsp.dsp import syncsignal_tx2rx as syncsignal
-    for signal in signals:
-        cma = CMA(ntaps=321, lr=0.00001, loops=3)
-        signal[:] = signal[:]/np.sqrt(np.mean(np.abs(signal[:])**2,axis=-1,keepdims=True))
-        signal = cma.equalize(signal)
-        # cma.plot_error()
 
-        out = syncsignal(signal.samples,signal.tx_symbols)
-        signal.tx_symbols = out
-        signal.tx_symbols = signal.tx_symbols[:,:signal.shape[1]]
-        cpe = Superscalar(256,0.02,20,0,4)
-        signal = cpe.prop(signal)
-        signal[:] = signal[:]/np.sqrt(np.mean(np.abs(signal[:])**2,axis=-1,keepdims=True))
-        noise = signal[:] - signal.tx_symbols
-        power = np.mean(np.abs(noise)**2,axis=-1).sum()
-        print(10*np.log10((2-power)/power))
+    cma = CMA(ntaps=321, lr=0.0001, loops=3)
+    signal[:] = signal[:]/np.sqrt(np.mean(np.abs(signal[:])**2,axis=-1,keepdims=True))
+    signal = cma.equalize(signal)
+    # cma.plot_error()
 
-
-    return signals
-
+    out = syncsignal(signal.samples,signal.tx_symbols)
+    signal.tx_symbols = out
+    signal.tx_symbols = signal.tx_symbols[:,:signal.shape[1]]
+    cpe = Superscalar(256,0.02,20,0,4)
+    signal = cpe.prop(signal)
+    signal[:] = signal[:]/np.sqrt(np.mean(np.abs(signal[:])**2,axis=-1,keepdims=True))
+    noise = signal[:] - signal.tx_symbols
+    power = np.mean(np.abs(noise)**2,axis=-1).sum()
+    print(10*np.log10((2-power)/power))
 def main(samples,symbols,adc_rate,dac_rate,baudrate,tx_symbol_length,span_length,span_param):
 
     span = Fiber(length=span_length,reference_wavelength=1550,slope=0,**span_param)
@@ -68,18 +68,18 @@ def main(samples,symbols,adc_rate,dac_rate,baudrate,tx_symbol_length,span_length
     signal = freq_comp.prop(signal)
     print(freq_comp.freq_offset)
     signals = find_each_section(signal,total_length=int(np.floor(len(signal)/sylen/2)),symbol_length=sylen)
-
-    signals = batch_equlization(signals)
+    for signal in signals:
+        batch_equlization(signal)
 if __name__ == '__main__':
     import numpy as np
     import joblib
     from preprocessing import readdata
     from scipy.io import loadmat
-    samples = readdata('0')
+    samples = readdata('xixi0')
     #samples = np.load('6.npz')['arr_0']
-    samples[0],samples[1] = samples[1],samples[0]
+    #samples[0],samples[1] = samples[1],samples[0]
     symbols = loadmat('txqpsk.mat')['tx_symbols']
-    symbols[0] = np.conj(symbols[0])
+    #symbols[0] = np.conj(symbols[0])
     symbols[1] = np.conj(symbols[1])
 
 
