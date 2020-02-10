@@ -1,11 +1,13 @@
 import numpy as np
+from numpy.fft import fftshift
+
 from class_define import Signal
 from dsp.dsp_tools import _segment_axis
 from dsp.numba_core import cma_equalize_core, lms_equalize_core
-from filter_design import rrcos_pulseshaping_freq
+from dsp.filter_design import rrcos_pulseshaping_freq
 import matplotlib.pyplot as plt
 
-def cd_compensation(span, signal: Signal, fs):
+def cd_compensation(span, signal: Signal, fs) -> Signal:
     '''
         span: The span for cd_c,should inlcude the following attributes:
             beta2:callable: receive the signal wavelength and return beta2
@@ -39,7 +41,8 @@ def matched_filter(signal: Signal, roll_off) -> Signal:
 
 
 class Equalizer(object):
-    def __init__(self, ntaps, lr, loops):
+    def __init__(self, ntaps, lr, loops,backend='mpl'):
+        self.backend = backend
         self.wxx = np.zeros((1, ntaps), dtype=np.complex)
         self.wxy = np.zeros((1, ntaps), dtype=np.complex)
 
@@ -66,25 +69,38 @@ class Equalizer(object):
         import matplotlib.pyplot as plt
         fignumber = self.equalized_symbols.shape[0]
         fig, axes = plt.subplots(nrows=1, ncols=fignumber)
+        
         for ith, ax in enumerate(axes):
             ax.scatter(self.equalized_symbols[ith, ::sps].real, self.equalized_symbols[ith, ::sps].imag, s=1, c='b')
             ax.set_aspect('equal', 'box')
 
-            ax.set_xlim([self.equalized_symbols[ith, ::sps].real.min() - 0.1,
-                         self.equalized_symbols[ith, ::sps].real.max() + 0.1])
-            ax.set_ylim([self.equalized_symbols[ith, ::sps].imag.min() - 0.1,
-                         self.equalized_symbols[ith, ::sps].imag.max() + 0.1])
-
+            ax.set_xlim([self.equalized_symbols[ith, ::sps].real.min() - self.equalized_symbols[ith, ::sps].real.min()/4 , 
+                         self.equalized_symbols[ith, ::sps].real.max() + self.equalized_symbols[ith, ::sps].real.max()/4])
+            ax.set_ylim([self.equalized_symbols[ith, ::sps].imag.min() - self.equalized_symbols[ith, ::sps].imag.min()/4 ,
+                         self.equalized_symbols[ith, ::sps].imag.max() + self.equalized_symbols[ith, ::sps].imag.max()/4])
+            ax.set_title('scatterplot after Equalizer')
+        
         plt.tight_layout()
-        plt.show()
+        if self.backend == 'mpl':
+            plt.show()
+        else:
+            import visdom
+            vis = visdom.Visdom(env='receiver_dsp')
+            vis.matplot(fig)
 
     def plot_error(self):
         fignumber = self.equalized_symbols.shape[0]
         fig, axes = plt.subplots(figsize=(8, 4), nrows=1, ncols=fignumber)
         for ith, ax in enumerate(axes):
             ax.plot(self.error_xpol_array[0], c='b', lw=1)
+        fig.suptitle("Error Curve of the equalizer")
         plt.tight_layout()
-        plt.show()
+        if self.backend =='mpl':
+            plt.show()
+        else:
+            import visdom
+            vis = visdom.Visdom(env='receiver_dsp')
+            vis.matplot(fig)
 
     def plot_freq_response(self):
         from scipy.fftpack import fft, fftshift
@@ -94,8 +110,16 @@ class Equalizer(object):
         for idx, row in enumerate(axes.flatten()):
             row.plot(np.abs(freq_res[idx][0]))
             row.set_title(f"{['wxx', 'wxy', 'wyx', 'wyy'][idx]}")
+        fig.suptitle("Freq_response of the Equazlizer")
+
         plt.tight_layout()
-        plt.show()
+        if self.backend == 'mpl':
+            plt.show()
+        else:
+            
+            import visdom
+            vis = visdom.Visdom(env='receiver_dsp')
+            vis.matplot(fig)
 
     def freq_response(self):
         from scipy.fftpack import fft, fftshift
@@ -105,8 +129,8 @@ class Equalizer(object):
 
 class CMA(Equalizer):
 
-    def __init__(self, ntaps, lr, loops=3):
-        super().__init__(ntaps, lr, loops)
+    def __init__(self, ntaps, lr, loops=3,backend = 'mpl'):
+        super().__init__(ntaps, lr, loops,backend)
 
     def equalize(self, signal):
 
@@ -134,9 +158,9 @@ class CMA(Equalizer):
 
 class LMS(Equalizer):
 
-    def __init__(self,ntaps,lr,loops,train_symbols,train_time):
+    def __init__(self,ntaps,lr,loops,train_symbols,train_time,backend='mpl'):
 
-        super(LMS, self).__init__(ntaps,lr,loops)
+        super(LMS, self).__init__(ntaps,lr,loops,backend=backend)
         self.train_symbols = train_symbols
         self.train_time = train_time
 
@@ -149,6 +173,7 @@ class LMS(Equalizer):
         self.error_xpol_array = np.zeros((self.loops, len(samples_xpol)))
         self.error_ypol_array = np.zeros((self.loops, len(samples_xpol)))
         #ex, ey, train_symbol, wxx, wyy, wxy, wyx, mu_train, mu_dd, is_train):
+        assert self.loops >=1
         for idx in range(self.loops):
             if self.train_time:
                 symbols, self.wxx, self.wxy, self.wyx, \
@@ -171,6 +196,8 @@ class LMS(Equalizer):
 
         self.equalized_symbols = symbols
         signal.samples = symbols
+        signal.fs = signal.baudrate
+
         return signal
 
 
@@ -181,7 +208,7 @@ class FrequencyOffsetComp(object):
         self.group = group
         self.apply = apply
 
-    def prop(self,signal:Signal):
+    def prop(self,signal:Signal) -> Signal:
         from .dsp_tools import _segment_axis
         from .dsp_tools import get_time_vector
         length = len(signal)// self.group
@@ -202,7 +229,7 @@ class FrequencyOffsetComp(object):
 
         for idx, (xpol_row, ypol_row) in enumerate(zip(xpol, ypol)):
             array = np.array([xpol_row, ypol_row])
-            freq = find_freq_offset(array, signal.fs, fft_size=xpol.shape[1])
+            freq = find_freq_offset(array, signal.fs, fft_size=2**18)
             phase[idx] = 2 * np.pi * freq * time_vector_segment + last_point
             freq_offset.append(freq)
             last_point = phase[idx, -1]
@@ -253,8 +280,10 @@ def find_freq_offset(sig, fs,average_over_modes = True, fft_size = 2**18):
     # Extract corresponding FO
     freq_offset = np.zeros([npols,1])
     freq_vector = np.fft.fftfreq(fft_size,1/fs)/4
+
     for k in range(npols):
         max_freq_bin = np.argmax(np.abs(freq_sig[k,:]))
+       # print(max_freq_bin,end=',')
         freq_offset[k,0] = freq_vector[max_freq_bin]
 
 
@@ -279,24 +308,24 @@ class Superscalar:
         self.filter_n = filter_n
         self.delay = 0
         self.phase_noise = []
-        self.cpr = []
+        self.cpr_symbol = []
         self.symbol_for_snr = []
         self.pilot_number = pilot_number
         self.const = None
 
-    def prop(self,signal):
+    def prop(self,signal:Signal)->Signal:
         self.const = signal.constl
         res,res_symbol = self.__divide_signal_into_block(signal)
         self.block_number = len(res[0])
         for row_samples,row_symbols in zip(res,res_symbol):
-            phase_noise,cpr_temp,symbol_for_snr = self.__prop_one_pol(row_samples,row_symbols)
-            self.cpr.append(cpr_temp)
+            phase_noise,cpr_temp_symbol,symbol_for_snr = self.__prop_one_pol(row_samples,row_symbols)
+            self.cpr_symbol.append(cpr_temp_symbol)
             self.symbol_for_snr.append(symbol_for_snr)
             self.phase_noise.append(phase_noise)
-        signal.samples = np.array(self.cpr)
-        signal.tx_symbols = np.array(self.symbol_for_snr)
 
-        self.cpr = np.array(self.cpr)
+        signal.samples = np.array(self.cpr_symbol)
+        signal.tx_symbols = np.array(self.symbol_for_snr)
+        self.cpr_symbol = np.array(self.cpr_symbol)
         self.symbol_for_snr = np.array(self.symbol_for_snr)
         return signal
 
@@ -392,9 +421,6 @@ class Superscalar:
         return cpr_symbols
 
 
-
-
-
 def decision(decision_symbols,const):
     decision_symbols = np.atleast_2d(decision_symbols)
     const = np.atleast_2d(const)[0]
@@ -456,19 +482,20 @@ def syncsignal_tx2rx(symbol_rx, symbol_tx):
         sample_rx_temp = symbol_rx[i, :]
 
         res = correlate(symbol_tx_temp, sample_rx_temp)
-        plt.plot(np.abs(res))
+        #plt.plot(np.abs(res))
         index = np.argmax(np.abs(res))
 
         out[i] = np.roll(symbol_tx_temp, -index - 1 + sample_rx_temp.shape[0])
     return out
 
 
-def remove_dc(samples):
+def remove_dc(signal):
+    samples = signal[:]
     samples = np.atleast_2d(samples)
-    samples = samples - np.mean(samples,axis=1,keepdims=True)
-    return samples
+    samples[:] = samples - np.mean(samples,axis=1,keepdims=True)
+    return signal
 
-def orthonormalize_signal(E, os=1):
+def orthonormalize_signal(E:Signal, os=1)->Signal:
     """
     Orthogonalizing signal using the Gram-Schmidt process _[1].
     Parameters
@@ -479,15 +506,15 @@ def orthonormalize_signal(E, os=1):
         oversampling ratio of the signal
     Returns
     -------
-    E_out : array_like
+    E_out : array_likeE
         orthonormalized signal
     References
     ----------
     .. [1] https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process for more
        detailed description.
     """
-
-    E = np.atleast_2d(E)
+    signal = E
+    E = np.atleast_2d(E[:])
     E_out = np.empty_like(E)
     for l in range(E.shape[0]):
         # Center
@@ -505,6 +532,6 @@ def orthonormalize_signal(E, os=1):
         # Final total normalization to ensure IQ-power equals 1
         E_out[l,:] = sig_out - np.mean(sig_out[::os])
         E_out[l,:] = E_out[l,:] / np.sqrt(np.mean(np.abs(E_out[l,::os])**2))
-
-    return E_out
+    signal.samples = E_out
+    return signal
 

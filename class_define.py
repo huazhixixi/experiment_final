@@ -1,9 +1,19 @@
 import numpy as np
 from scipy.constants import c
 import matplotlib.pyplot as plt
+
+
 class Signal:
 
-    def __init__(self,baudrate,samples,tx_symbols,fs,wavelength):
+    def __init__(self, baudrate, samples, tx_symbols, fs, wavelength):
+        '''
+        :param baudrate: hz
+        :param samples
+        :param tx_symbols
+        :param fs:hz
+        :param wavelength: m
+
+        '''
         self.baudrate = baudrate
         self.samples = samples
         self.tx_symbols = tx_symbols
@@ -24,45 +34,53 @@ class Signal:
     @property
     def shape(self):
         return self.samples.shape
+
     @property
     def constl(self):
         return np.unique(self.tx_symbols[0])
+
     @property
     def symbol(self):
         return self.tx_symbols
+
     @property
     def sps(self):
-        return int(self.fs /self.baudrate)
+        return int(self.fs / self.baudrate)
 
     def __len__(self):
-
         samples = np.atleast_2d(self.samples)
         return len(samples[0])
 
     def scatterplot(self, sps):
-
-
+        import visdom
         fignumber = self.shape[0]
         fig, axes = plt.subplots(nrows=1, ncols=fignumber)
         for ith, ax in enumerate(axes):
             ax.scatter(self[ith, ::sps].real, self[ith, ::sps].imag, s=1, c='b')
             ax.set_aspect('equal', 'box')
 
-            # ax.set_xlim(
-            #     [self[ith, ::sps].real.min() - self[ith, ::sps].real.min() / 3,
-            #      self[ith, ::sps].real.max() + self[ith, ::sps].real.max() / 3])
-            # ax.set_ylim(
-            #     [self[ith, ::sps].imag.min() - self[ith, ::sps].imag.min() / 3,
-            #      self[ith, ::sps].imag.max() + self[ith, ::sps].imag.max() / 3])
+            ax.set_xlim(
+                [self[ith, ::sps].real.min() - np.abs(self[ith, ::sps].real.min() / 2),
+                 self[ith, ::sps].real.max() + np.abs(self[ith, ::sps].real.max() / 2)])
+            ax.set_ylim(
+                 [self[ith, ::sps].imag.min() - np.abs(self[ith, ::sps].imag.min() / 2),
+                  self[ith, ::sps].imag.max() + np.abs(self[ith, ::sps].imag.max() / 2)])
 
         plt.tight_layout()
         plt.show()
+    def inplace_normalise(self):
 
-
+        self[:] = self[:]/np.sqrt(np.mean(np.abs(self[:])**2,axis=-1,keepdims=True))
+        return self
+    def resample(self,new_sps):
+        import resampy
+        self.samples = resampy.resample(self[:], self.fs / self.baudrate, new_sps)
+        self.fs = new_sps * self.baudrate
+        return self
 
 class Fiber(object):
 
-    def __init__(self, alpha, D, length, reference_wavelength,slope):
+    def __init__(self, alpha, D, length, reference_wavelength, slope):
         '''
             :param alpha:db/km
             :D:s^2/km
@@ -108,6 +126,3 @@ class Fiber(object):
         effective_length = 1 - np.exp(-self.alphalin * length)
         effective_length = effective_length / self.alphalin
         return effective_length
-
-
-
