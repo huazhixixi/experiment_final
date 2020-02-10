@@ -52,6 +52,7 @@ class Signal:
         return len(samples[0])
 
     def scatterplot(self, sps):
+        import visdom
         fignumber = self.shape[0]
         fig, axes = plt.subplots(nrows=1, ncols=fignumber)
         for ith, ax in enumerate(axes):
@@ -59,21 +60,21 @@ class Signal:
             ax.set_aspect('equal', 'box')
 
             ax.set_xlim(
-                [self[ith, ::sps].real.min() - self[ith, ::sps].real.min() / 2,
-                 self[ith, ::sps].real.max() + self[ith, ::sps].real.max() / 2])
+                [self[ith, ::sps].real.min() - np.abs(self[ith, ::sps].real.min() / 2),
+                 self[ith, ::sps].real.max() + np.abs(self[ith, ::sps].real.max() / 2)])
             ax.set_ylim(
-                [self[ith, ::sps].imag.min() - self[ith, ::sps].imag.min() / 2,
-                 self[ith, ::sps].imag.max() + self[ith, ::sps].imag.max() / 2])
+                 [self[ith, ::sps].imag.min() - np.abs(self[ith, ::sps].imag.min() / 2),
+                  self[ith, ::sps].imag.max() + np.abs(self[ith, ::sps].imag.max() / 2)])
 
         plt.tight_layout()
-
+        plt.show()
     def inplace_normalise(self):
 
-        self[:] = self[:]/np.sqrt(np.mean(np.abs(self[:])**2,axis=-1))
+        self[:] = self[:]/np.sqrt(np.mean(np.abs(self[:])**2,axis=-1,keepdims=True))
         return self
     def resample(self,new_sps):
         import resampy
-        self[:] = resampy.resample(self[:], self.fs / self.baudrate, new_sps)
+        self.samples = resampy.resample(self[:], self.fs / self.baudrate, new_sps)
         self.fs = new_sps * self.baudrate
         return self
 

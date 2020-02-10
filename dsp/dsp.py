@@ -1,4 +1,6 @@
 import numpy as np
+from numpy.fft import fftshift
+
 from class_define import Signal
 from dsp.dsp_tools import _segment_axis
 from dsp.numba_core import cma_equalize_core, lms_equalize_core
@@ -227,7 +229,7 @@ class FrequencyOffsetComp(object):
 
         for idx, (xpol_row, ypol_row) in enumerate(zip(xpol, ypol)):
             array = np.array([xpol_row, ypol_row])
-            freq = find_freq_offset(array, signal.fs, fft_size=xpol.shape[1])
+            freq = find_freq_offset(array, signal.fs, fft_size=2**18)
             phase[idx] = 2 * np.pi * freq * time_vector_segment + last_point
             freq_offset.append(freq)
             last_point = phase[idx, -1]
@@ -278,8 +280,10 @@ def find_freq_offset(sig, fs,average_over_modes = True, fft_size = 2**18):
     # Extract corresponding FO
     freq_offset = np.zeros([npols,1])
     freq_vector = np.fft.fftfreq(fft_size,1/fs)/4
+
     for k in range(npols):
         max_freq_bin = np.argmax(np.abs(freq_sig[k,:]))
+       # print(max_freq_bin,end=',')
         freq_offset[k,0] = freq_vector[max_freq_bin]
 
 
@@ -478,7 +482,7 @@ def syncsignal_tx2rx(symbol_rx, symbol_tx):
         sample_rx_temp = symbol_rx[i, :]
 
         res = correlate(symbol_tx_temp, sample_rx_temp)
-        plt.plot(np.abs(res))
+        #plt.plot(np.abs(res))
         index = np.argmax(np.abs(res))
 
         out[i] = np.roll(symbol_tx_temp, -index - 1 + sample_rx_temp.shape[0])
@@ -502,14 +506,14 @@ def orthonormalize_signal(E:Signal, os=1)->Signal:
         oversampling ratio of the signal
     Returns
     -------
-    E_out : array_like
+    E_out : array_likeE
         orthonormalized signal
     References
     ----------
     .. [1] https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process for more
        detailed description.
     """
-
+    signal = E
     E = np.atleast_2d(E[:])
     E_out = np.empty_like(E)
     for l in range(E.shape[0]):
@@ -528,6 +532,6 @@ def orthonormalize_signal(E:Signal, os=1)->Signal:
         # Final total normalization to ensure IQ-power equals 1
         E_out[l,:] = sig_out - np.mean(sig_out[::os])
         E_out[l,:] = E_out[l,:] / np.sqrt(np.mean(np.abs(E_out[l,::os])**2))
-    E.samples = E_out
-    return E
+    signal.samples = E_out
+    return signal
 

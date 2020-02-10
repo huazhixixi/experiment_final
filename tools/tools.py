@@ -4,6 +4,8 @@ from dsp.dsp import syncsignal
 
 
 def average_over_symbol(signals:[Signal]) -> Signal:
+    if len(signals) ==0:
+        return
     xpol = 0
     ypol = 0
 
@@ -16,7 +18,7 @@ def average_over_symbol(signals:[Signal]) -> Signal:
 
 
     samples = np.vstack((xpol,ypol))
-    signal = Signal(signals[0].baudrate,samples,signals[0].tx_symbols,signals[0].fs,signals[0].wavelenght)
+    signal = Signal(signals[0].baudrate,samples,signals[0].tx_symbols,signals[0].fs,signals[0].wavelength)
     return signal
 
 
@@ -37,3 +39,22 @@ def find_each_section(signal, total_length, symbol_length,is_visable):
             return signals
 
     return signals
+
+import matplotlib.pyplot as plt
+def scatterplot(samples,sps):
+        import visdom
+        fignumber = samples.shape[0]
+        fig, axes = plt.subplots(nrows=1, ncols=fignumber)
+        for ith, ax in enumerate(axes):
+            ax.scatter(samples[ith, ::sps].real, samples[ith, ::sps].imag, s=1, c='b')
+            ax.set_aspect('equal', 'box')
+
+            ax.set_xlim(
+                [samples[ith, ::sps].real.min() - np.abs(samples[ith, ::sps].real.min() / 2),
+                 samples[ith, ::sps].real.max() + np.abs(samples[ith, ::sps].real.max() / 2)])
+            ax.set_ylim(
+                 [samples[ith, ::sps].imag.min() - np.abs(samples[ith, ::sps].imag.min() / 2),
+                  samples[ith, ::sps].imag.max() + np.abs(samples[ith, ::sps].imag.max() / 2)])
+
+        plt.tight_layout()
+        plt.show()
